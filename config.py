@@ -14,7 +14,7 @@ BOT_TOKEN = os.environ.get(
 
 PASS_DB = int(os.environ.get("PASS_DB", 721))
 
-OWNER = int(os.environ.get("OWNER", 7212452634))
+OWNER = int(os.environ.get("OWNER", 8500852075))
 
 STRING = os.environ.get(
     "STRING",
