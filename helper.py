@@ -13,49 +13,59 @@ import aiofiles
 from pyrogram.types import Message
 from pyrogram import Client, filters
 
+failed_counter = 0
+
 
 def duration(filename):
-    result = subprocess.run([
-        "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of",
-        "default=noprint_wrappers=1:nokey=1", filename
-    ],
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT)
-    return float(result.stdout)
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            filename
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT
+    )
+    try:
+        return float(result.stdout)
+    except Exception:
+        return 0.0
 
 
 async def download(url, name):
-    ka = f'{name}.pdf'
+    ka = f"{name}.pdf"
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
             if resp.status == 200:
-                f = await aiofiles.open(ka, mode='wb')
-                await f.write(await resp.read())
-                await f.close()
+                async with aiofiles.open(ka, mode="wb") as f:
+                    await f.write(await resp.read())
     return ka
-
 
 
 async def run(cmd):
     proc = await asyncio.create_subprocess_shell(
-        cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
 
     stdout, stderr = await proc.communicate()
 
-    print(f'[{cmd!r} exited with {proc.returncode}]')
+    print(f"[{cmd!r} exited with {proc.returncode}]")
     if proc.returncode == 1:
         return False
     if stdout:
-        return f'[stdout]\n{stdout.decode()}'
+        return f"[stdout]\n{stdout.decode()}"
     if stderr:
-        return f'[stderr]\n{stderr.decode()}'
+        return f"[stderr]\n{stderr.decode()}"
 
 
 def old_download(url, file_name, chunk_size=3072 * 10):
     if os.path.exists(file_name):
         os.remove(file_name)
     r = requests.get(url, allow_redirects=True, stream=True)
-    with open(file_name, 'wb') as fd:
+    with open(file_name, "wb") as fd:
         for chunk in r.iter_content(chunk_size=chunk_size):
             if chunk:
                 fd.write(chunk)
@@ -63,8 +73,8 @@ def old_download(url, file_name, chunk_size=3072 * 10):
 
 
 def human_readable_size(size, decimal_places=2):
-    for unit in ['B', 'KB', 'MB', 'GB', 'TB', 'PB']:
-        if size < 3072.0 or unit == 'PB':
+    for unit in ["B", "KB", "MB", "GB", "TB", "PB"]:
+        if size < 3072.0 or unit == "PB":
             break
         size /= 1024.0
     return f"{size:.{decimal_places}f} {unit}"
@@ -78,42 +88,53 @@ def time_name():
 
 
 async def download_video(url, cmd, name):
-    download_cmd = f'{cmd} -R 25 --fragment-retries 25 --external-downloader aria2c --downloader-args "aria2c: -x 16 -j 32"'
     global failed_counter
+
+    download_cmd = (
+        f'{cmd} -R 25 --fragment-retries 25 '
+        '--external-downloader aria2c '
+        '--downloader-args "aria2c: -x 16 -j 32"'
+    )
+
     print(download_cmd)
     logging.info(download_cmd)
+
     k = subprocess.run(download_cmd, shell=True)
+
     if "visionias" in cmd and k.returncode != 0 and failed_counter <= 10:
         failed_counter += 1
         await asyncio.sleep(5)
-        await download_video(url, cmd, name)
+        return await download_video(url, cmd, name)
+
     failed_counter = 0
+
     try:
         if os.path.isfile(name):
             return name
-        elif os.path.isfile(f"{name}.webm"):
+        if os.path.isfile(f"{name}.webm"):
             return f"{name}.webm"
-        name = name.split(".")[0]
-        if os.path.isfile(f"{name}.mkv"):
-            return f"{name}.mkv"
-        elif os.path.isfile(f"{name}.mp4"):
-            return f"{name}.mp4"
-        elif os.path.isfile(f"{name}.mp4.webm"):
-            return f"{name}.mp4.webm"
+
+        base = os.path.splitext(name)[0]
+
+        if os.path.isfile(f"{base}.mkv"):
+            return f"{base}.mkv"
+        if os.path.isfile(f"{base}.mp4"):
+            return f"{base}.mp4"
+        if os.path.isfile(f"{base}.mp4.webm"):
+            return f"{base}.mp4.webm"
 
         return name
-    except FileNotFoundError as exc:
-        return os.path.isfile.splitext[0] + "." + "mp4"
-
+    except Exception:
+        return name
 
 
 async def send_vid(bot: Client, m: Message, cc, filename, thumb, name):
 
     subprocess.run(
         f'ffmpeg -i "{filename}" -ss 00:01:00 -vframes 1 "{filename}.jpg"',
-        shell=True)
-   # await prog.delete(True)
-   # reply = await m.reply_text(f"**Uploading ...** - `{name}`")
+        shell=True
+    )
+
     try:
         if thumb == "no":
             thumbnail = f"{filename}.jpg"
@@ -121,24 +142,53 @@ async def send_vid(bot: Client, m: Message, cc, filename, thumb, name):
             thumbnail = thumb
     except Exception as e:
         await m.reply_text(str(e))
+        thumbnail = None
 
     dur = int(duration(filename))
-
     start_time = time.time()
 
     try:
-        copy = await bot.send_video(chat_id=m.chat.id,video=filename,caption=cc, supports_streaming=True,height=720,width=1280,thumb=thumbnail,duration=dur) #, progress=progress_bar,progress_args=(reply,start_time))
-        await copy.copy(chat_id = LOG) 
+        copy = await bot.send_video(
+            chat_id=m.chat.id,
+            video=filename,
+            caption=cc,
+            supports_streaming=True,
+            height=720,
+            width=1280,
+            thumb=thumbnail,
+            duration=dur
+        )
+        await copy.copy(chat_id=LOG)
+
     except TimeoutError:
-        await asyncio.sleep(5) 
-        copy = await bot.send_video(chat_id=m.chat.id,video=filename,caption=cc, supports_streaming=True,height=720,width=1280,thumb=thumbnail,duration=dur) #, progress=progress_bar,progress_args=(reply,start_time))
-        await copy.copy(chat_id = LOG)       
+        await asyncio.sleep(5)
+        copy = await bot.send_video(
+            chat_id=m.chat.id,
+            video=filename,
+            caption=cc,
+            supports_streaming=True,
+            height=720,
+            width=1280,
+            thumb=thumbnail,
+            duration=dur
+        )
+        await copy.copy(chat_id=LOG)
+
     except Exception:
-        copy = await bot.send_video(chat_id=m.chat.id,video=filename,caption=cc, supports_streaming=True,height=720,width=1280,thumb=thumbnail,duration=dur) #progress=progress_bar,progress_args=(reply,start_time))
-        await copy.copy(chat_id = LOG)
+        copy = await bot.send_video(
+            chat_id=m.chat.id,
+            video=filename,
+            caption=cc,
+            supports_streaming=True,
+            height=720,
+            width=1280,
+            thumb=thumbnail,
+            duration=dur
+        )
+        await copy.copy(chat_id=LOG)
 
+    if os.path.exists(filename):
+        os.remove(filename)
 
-    os.remove(filename)
-
-    os.remove(f"{filename}.jpg")
-   # await prog.delete(True)
+    if os.path.exists(f"{filename}.jpg"):
+        os.remove(f"{filename}.jpg")
