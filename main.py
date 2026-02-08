@@ -1,3 +1,5 @@
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import requests
 import json
 import subprocess
@@ -798,5 +800,16 @@ async def account_login(bot: Client, m: Message):
     except Exception as e:
         await m.reply_text(str(e))
     await m.reply_text("Done")
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running")
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    HTTPServer(("0.0.0.0", port), Handler).serve_forever()
     
-bot.run()    
+threading.Thread(target=bot.run, daemon=True).start()
+run_web()
