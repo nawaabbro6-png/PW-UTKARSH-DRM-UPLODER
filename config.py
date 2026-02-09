@@ -9,7 +9,7 @@ API_HASH = os.environ.get(
 
 BOT_TOKEN = os.environ.get(
     "BOT_TOKEN",
-    "8403969795:AAHd_gYphmuPoD0_z3b38-JbHeH-lZhgIFA"
+    "8403969795:AAFxFmylzQNvSY1W23ubNeR0Ihh3_s8Vlxk"
 )
 
 PASS_DB = int(os.environ.get("PASS_DB", 721))
